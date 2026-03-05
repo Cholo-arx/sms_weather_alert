@@ -1,17 +1,16 @@
 import os
 import requests
-from dotenv import load_detenv
+from dotenv import load_dotenv
 
-load_detenv
+load_dotenv()
 
-OPEN_API_KEY = os.getenv("OPENWEATHER_API_KEY")
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 SEMAPHORE_API_KEY = os.getenv("SEMAPHORE_API_KEY")
 SEMAPHORE_SENDER = os.getenv("SEMAPHORE_SENDER_NAME", "WeatherAlert")
 ALERT_TO_NUMBER = os.getenv("ALERT_TO_NUMBER")
-OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
 #  Warning thresholds
-THRESHOLD = {
+THRESHOLDS = {
     "temp_high_c": 41,
     "temp_low_c": 0,
     "wind_speed_mps": 15,
@@ -24,7 +23,7 @@ SEVERE_WEATHER_IDS = {
     # Thunderstorm
     200, 201, 202, 210, 211, 212, 221, 230, 231, 232,
     # Heavy rain / drizzle
-    302, 312, 314, 321, 502, 503, 504, 511,
+    302, 312, 314, 321, 502, 503, 504, 511, 622,
     # Extreme
     900, 901, 902, 903, 904, 905, 906,
     # Tornado, fog, squalls
@@ -36,10 +35,11 @@ def fetch_weather(city: str) -> dict:
     """Fetch current weather data from OpenWeatherMap."""
     url = "https://api.openweathermap.org/data/2.5/weather"
     params = {
-        "q":     city,
+        "q": city,
         "appid": OPENWEATHER_API_KEY,
         "units": "metric",
     }
+
     response = requests.get(url, params=params, timeout=10)
     response.raise_for_status()
     return response.json()
@@ -54,6 +54,7 @@ def fetch_weather_by_coords(lat: float, lon: float) -> dict:
         "appid": OPENWEATHER_API_KEY,
         "units": "metric",
     }
+
     response = requests.get(url, params=params, timeout=10)
     response.raise_for_status()
     return response.json()
@@ -127,3 +128,55 @@ def check_and_alert(city: str, to_number: str = None) -> None:
     if not warnings:
         print("[✓] No weather warnings. No SMS sent.")
         return
+
+
+def send_sms(message: str, to_number: str = None) -> str:
+    """Send an SMS via Semaphore (PH). Returns the message ID."""
+    recipient = to_number or ALERT_TO_NUMBER
+
+    url = "https://api.semaphore.co/api/v4/messages"
+    payload = {
+        "apikey":     SEMAPHORE_API_KEY,
+        "number":     recipient,
+        "message":    message,
+        "sendername": SEMAPHORE_SENDER,
+    }
+
+    response = requests.post(url, data=payload, timeout=10)
+    response.raise_for_status()
+
+    result = response.json()
+    message_id = result[0].get("message_id", "N/A")
+    return str(message_id)
+
+
+def check_multiple_cities(cities: list[str], to_number: str = None) -> None:
+    for city in cities:
+        try:
+            check_and_alert(city, to_number)
+        except requests.HTTPError as e:
+            print(f'[X] Error for "{city}": {e}')
+        except Exception as e:
+            print(f'[X] Error processing "{city}": {e}')
+        print()
+
+
+def check_and_alert(city: str, to_number: str = None) -> None:
+    print(f"[+] Fetching weather for: {city}")
+    data = fetch_weather(city)
+
+    print(f"Temparature: {data['main']['temp']:.1f}°C")
+    print(f"Humidity: {data['main']['humidity']}%")
+    print(f"Wind: {data['wind']['speed']:.1f} m/s")
+
+    warning = analyze_weather(data)
+
+    if not warnings:
+        print("[✓] No weather warnings. No SMS set")
+    return
+
+
+if __name__ == "__main__":
+
+    # ── Run for a single city ──
+    check_and_alert("Manila")
