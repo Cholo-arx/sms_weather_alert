@@ -103,33 +103,6 @@ def analyze_weather(data: dict) -> list[str]:
     return warnings
 
 
-def check_and_alert(city: str, to_number: str = None) -> None:
-    """
-    Main pipeline:
-      1. Fetch weather for city
-      2. Analyse for warnings
-      3. Send SMS if warnings exist
-    """
-    print(f"[+] Fetching weather for: {city}")
-    data = fetch_weather(city)
-
-    temp = data["main"]["temp"]
-    humidity = data["main"]["humidity"]
-    wind_spd = data["wind"]["speed"]
-    description = data["weather"][0]["description"].capitalize()
-
-    print(f"Condition : {description}")
-    print(f"Temp      : {temp:.1f}°C")
-    print(f"Humidity  : {humidity}%")
-    print(f"Wind      : {wind_spd:.1f} m/s")
-
-    warnings = analyze_weather(data)
-
-    if not warnings:
-        print("[✓] No weather warnings. No SMS sent.")
-        return
-
-
 def send_sms(message: str, to_number: str = None) -> str:
     """Send an SMS via Semaphore (PH). Returns the message ID."""
     recipient = to_number or ALERT_TO_NUMBER
@@ -150,6 +123,46 @@ def send_sms(message: str, to_number: str = None) -> str:
     return str(message_id)
 
 
+def check_and_alert(city: str, to_number: str = None) -> None:
+    """
+    Main pipeline:
+      1. Fetch weather for city
+      2. Analyse for warnings
+      3. Send SMS if warnings exist
+    """
+    print(f"[+] Fetching weather for: {city}")
+    data = fetch_weather(city)
+
+    temp = data["main"]["temp"]
+    humidity = data["main"]["humidity"]
+    wind_spd = data["wind"]["speed"]
+    description = data["weather"][0]["description"].capitalize()
+
+    print(f"Condition   : {description}")
+    print(f"Temperature : {temp:.1f}°C")
+    print(f"Humidity    : {humidity}%")
+    print(f"Wind        : {wind_spd:.1f} m/s")
+
+    warnings = analyze_weather(data)
+    if not warnings:
+        print("[✓] No weather warnings. No SMS sent.")
+        return
+
+    # Build SMS body and send
+    alert_lines = "\n".join(warnings)
+    sms_body = (
+        f"WEATHER ALERT - {city}\n"
+        f"{alert_lines}\n\n"
+        f"Stay safe! Check local forecasts for updates."
+    )
+
+    print(f"\n[!] Warnings detected:\n{alert_lines}\n")
+    print("[+] Sending SMS alert...")
+
+    sid = send_sms(sms_body, to_number)
+    print(f"[✓] SMS sent! Message ID: {sid}")
+
+
 def check_multiple_cities(cities: list[str], to_number: str = None) -> None:
     for city in cities:
         try:
@@ -159,21 +172,6 @@ def check_multiple_cities(cities: list[str], to_number: str = None) -> None:
         except Exception as e:
             print(f'[X] Error processing "{city}": {e}')
         print()
-
-
-def check_and_alert(city: str, to_number: str = None) -> None:
-    print(f"[+] Fetching weather for: {city}")
-    data = fetch_weather(city)
-
-    print(f"Temparature: {data['main']['temp']:.1f}°C")
-    print(f"Humidity: {data['main']['humidity']}%")
-    print(f"Wind: {data['wind']['speed']:.1f} m/s")
-
-    warning = analyze_weather(data)
-
-    if not warnings:
-        print("[✓] No weather warnings. No SMS set")
-    return
 
 
 if __name__ == "__main__":
